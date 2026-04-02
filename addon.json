@@ -1,0 +1,24 @@
+{
+  "name": "HD Textures",
+  "id": "nc2-hd-textures",
+  "version": "0.1.0",
+  "author": "Neocron Community",
+  "description": "AI-upscaled textures using Real-ESRGAN 4x. Replaces all game textures with high-resolution versions while preserving the original art style.",
+  "category": "graphics",
+  "tags": ["textures", "hd", "4k", "esrgan", "upscale", "graphics"],
+  "files": [
+    { "src": "gfx/decals/", "dst": "gfx/decals/" },
+    { "src": "gfx/modeltextures/", "dst": "gfx/modeltextures/" },
+    { "src": "gfx/items/", "dst": "gfx/items/" },
+    { "src": "gfx/maps/", "dst": "gfx/maps/" },
+    { "src": "gfx/misc/", "dst": "gfx/misc/" },
+    { "src": "gfx/rpos/", "dst": "gfx/rpos/" },
+    { "src": "gfx/rposv3/", "dst": "gfx/rposv3/" },
+    { "src": "gfx/sky/", "dst": "gfx/sky/" },
+    { "src": "gfx/eventtextures/", "dst": "gfx/eventtextures/" },
+    { "src": "gfx/mainmenu/", "dst": "gfx/mainmenu/" },
+    { "src": "gfx/weapon_fx/", "dst": "gfx/weapon_fx/" }
+  ],
+  "conflicts": [],
+  "requires": []
+}
