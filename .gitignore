@@ -5,3 +5,12 @@
 # OS files
 .DS_Store
 Thumbs.db
+
+# pipeline build artefacts (regenerable; huge)
+_build/
+pipeline/__pycache__/
+*.tar.gz
+release/
+# never commit secrets
+*.env
+replicate.env
