@@ -1,36 +1,51 @@
-# Reproducing the Neocron 2 PBR texture corpus
+# Reproducing the Neocron 2 PBR texture remaster
 
-Everything that turns the stock 2004 textures into the
-creative-remaster + ORME corpus consumed by **neocron-renodx-engine**.
-With a Replicate account and your own Neocron 2 client install you can
-regenerate the entire thing from scratch.
+Everything that turns the stock 2004 textures into the creative-remaster
++ PBR corpus and the **embedded-ID deployment** consumed by
+**neocron-renodx-engine**. With your own Neocron 2 client install (and a
+Replicate account *only if you want to regenerate the AI corpus*) you
+can reproduce the whole thing from scratch.
 
-Nothing here contains secrets or machine-specific paths — every
-location is an environment variable with a sensible default
-(`ncconfig.py`).
+No secrets, no machine paths — every location is an environment variable
+with a repo-relative default (`ncconfig.py`). These scripts are
+**tools to reproduce the result**, not part of the launcher (the
+launcher only installs & runs the shipped addon).
+
+---
 
 ## What it produces
 
-For every world / model texture, three sibling files keyed by a hash of
-the *vanilla* texture the engine sees at runtime:
+1. A per-texture **triplet** under `$NC_PBR_BUILD/output/...`:
 
-| file            | what                                                   |
-|-----------------|--------------------------------------------------------|
-| `*_albedo.jpg`  | clarity-upscaler creative regen, guided by the original|
-| `*_n.png`       | Marigold surface normals                               |
-| `*_orme.png`    | RGBA: **R**=occlusion **G**=roughness **B**=metallic **A**=emissive |
+   | file | what |
+   |---|---|
+   | `*_albedo.jpg` | clarity-upscaler creative regen, guided by the original |
+   | `*_n.png` | Marigold surface normals |
+   | `*_orme.png` | RGBA: **R**=occlusion **G**=roughness **B**=metallic **A**=emissive |
 
-plus `texture_index.txt` (`<hash> albedo normal orme` per line).
+2. The **deployment** the engine actually reads (in the game install):
+   - every vanilla `pak_*.dds` that has a triplet is stamped with a
+     32-bit **id** in mip-0 block-0 (`NCID` + id LE);
+   - one **container** per id: `$NC_HD_CORPUS/<id8hex>.pbr` =
+     `"NCPBR\0"` + ver + 3×u32 LE lengths + albedo + normal + orme;
+   - `$NC_ID_INDEX` (`<id8hex> <relpath>` per line) the engine loads.
+
+   The id is keyed on **vanilla content** (not path): all byte-identical
+   copies of a texture across zones share one id → one container → the
+   same HD everywhere.
+
+---
 
 ## Prerequisites
 
-- A **Replicate** account + API token (https://replicate.com/account/api-tokens).
-  The pipeline calls three public models:
-  `philz1337x/clarity-upscaler`, `jasonod888/marigold-normals-intrinsics`,
+- **Neocron 2 client install** — the loose `gfx/worlds` &
+  `gfx/modeltextures` `pak_*` envelopes. Not redistributed here.
+- `php` (PAK unwrap/repack), `imagemagick` (`magick`), `python3`.
+- **Replicate** account + token — *only for step 1/2* (regenerating the
+  AI corpus). The shipped corpus is a release artifact; to just redeploy
+  it, skip to step 3. Models used: `philz1337x/clarity-upscaler`,
+  `jasonod888/marigold-normals-intrinsics`,
   `tommoore515/pix2pix_tf_albedo2pbrmaps`.
-- Your **Neocron 2 client install** (the loose `gfx/` tree with the
-  `pak_*.dds` / `pak_*.bmp` envelopes). Not redistributed here.
-- `php` (PAK unwrap), `imagemagick` (`magick`), `python3`.
 
 ## Setup
 
@@ -39,84 +54,115 @@ cd pipeline
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 
-export REPLICATE_API_TOKEN=r8_xxxxxxxx          # required
-export NC_GAME_DIR=/path/to/Neocron2            # default: ~/Neocron2
-# optional: export NC_PBR_BUILD=/big/disk/_build  (default: <repo>/_build)
+export NC_GAME_DIR=/path/to/Neocron2          # default: ~/Neocron2
+export REPLICATE_API_TOKEN=r8_xxxx            # only for step 1/2
+# optional: export NC_PBR_BUILD=/big/disk/_build   (default: <repo>/_build)
 ```
 
 `ncconfig.py` env overrides: `NC_GAME_DIR`, `NC_PAK_DECOMPRESS`,
-`NC_PBR_BUILD`, `NC_INDEX`, `REPLICATE_API_TOKEN`, `NC_REPLICATE_ENV`.
+`NC_PAK_COMPRESS`, `NC_PBR_BUILD`, `NC_INDEX`, `NC_HD_CORPUS`,
+`NC_ID_INDEX`, `NC_VANILLA512_BAK`, `NC_IDTAG_BAK`,
+`REPLICATE_API_TOKEN`, `NC_REPLICATE_ENV`.
 
-## Run
+---
 
-**1. World materials** — process per category (resumable; a texture whose
-`_orme.png` exists is skipped):
+## Pipeline
 
+### 1. Generate the world corpus  *(Replicate, resumable)*
 ```bash
-python pbr_pipeline.py --source "$NC_GAME_DIR/gfx/worlds" --only "worlds/global/" --jobs 5
-python pbr_pipeline.py --source "$NC_GAME_DIR/gfx/worlds" --only "worlds/metal/"  --jobs 5
-# ... or no --only for the whole tree
+python pbr_pipeline.py --source "$NC_GAME_DIR/gfx/worlds" --jobs 5
 ```
+Routing is automatic: tiling/seamless materials regen with
+`pattern=True` (stay seamless); UV atlases regen structure-locked. A
+texture whose `_orme.png` already exists is skipped.
 
-Routing is automatic: a tile/seamless material is regenerated with
-`pattern=True` (stays seamless); a UV atlas is regenerated
-structure-locked (UV survives) and gets a neutral ORME.
-
-**2. Model textures** (NPCs / mutants / power armor — UV atlases). First
-classify them by subject, then run; the pipeline reads the manifest and
-applies the per-class ORME profile (skin/cloth/mutant/powerarmor/robot):
-
+### 2. Generate the model corpus  *(Replicate)*
 ```bash
-python classify_models.py            # -> _build/modeltex_classes.tsv (100% cov)
+python classify_models.py     # -> _build/modeltex_classes.tsv (subject)
 python pbr_pipeline.py --source "$NC_GAME_DIR/gfx/modeltextures" \
                        --out "$NC_PBR_BUILD/output/modeltextures" --jobs 5
 ```
 
-**3. Build the index** (key = hash of the vanilla install texture; only
-complete triplets are emitted):
-
+### 3. Pre-shrink vanilla to ≤512  *(local, reversible)*
 ```bash
-python build_pbr_index.py            # -> ../texture_index.{txt,json}
+bash rescale512.sh --all
 ```
+The NC2 engine clamps >512 textures at load. Shrinking the vanilla so
+the engine loads it AS-IS makes the offline view == the runtime view,
+which the embedded-ID stamp depends on (block-0 must not be
+clamp-resampled). Backs originals up to `$NC_VANILLA512_BAK`.
+Restore: `rsync -a "$NC_VANILLA512_BAK/" "$NC_GAME_DIR/gfx/worlds/"`.
 
-**4. (optional) Free in-place tweaks** — no Replicate cost; rewrite just
-one ORME channel from the existing maps:
-
+### 4. Shrink the map corpus to ≤512  *(local)*
 ```bash
-python repatch_metallic.py           # category-aware metallic (metal/ folder -> M0.80)
-python repatch_emissive.py           # luminance emissive for lights/, recompute A
+python maps_to_512.py
 ```
+1024 maps are wasted (engine ceiling is 512). RGBA `_orme.png` is
+**band-split** before resize — PIL premultiplies alpha otherwise and
+zeroes RGB where emissive(A)==0. Do not "simplify" that.
 
-**5. Package** for the launcher (per-category tarballs < 2 GB):
-
+### 5. ORME occlusion policy  *(local, $0)*
 ```bash
-bash make_release.sh                 # -> _build/release/pbr-*.tar.gz
-# then: gh release create ... ; ship texture_index.txt as
-#       neocron_texture_index.txt ; add a fetch entry to ../addon.json
+python recover_orme.py        # only if some O came out ~0: recompute
+                              # exact M/A from albedo, neutral O/R
+python recover_ao_local.py    # O = 1.0 flat for ALL world ORME
 ```
+**Why flat O:** NC2 floor/walls/ceiling are *tiling*, not UV-mapped. A
+per-tile baked AO repeats and slides with the camera ("ORME jumping").
+The real AO for tiling geometry is in the game **lightmaps**, which the
+substituted `world.ps` already consumes as irradiance. So O is
+neutralised; the normal map supplies relief, roughness/metallic/emissive
+are kept. Per-tile AO only makes sense for genuine UV/atlas props.
+
+### 6. Deploy: embedded-ID stamp + containers  *(local, reversible)*
+```bash
+# prereq: install must be pristine ≤512
+rsync -a "$NC_IDTAG_BAK/" "$NC_GAME_DIR/gfx/worlds/" 2>/dev/null || true
+python mass_idtag.py
+```
+Content-keyed: one id per unique vanilla content, all copies stamped
+with it, one canonical container from the corpus triplet. Writes
+`$NC_ID_INDEX`, verifies every file's pak round-trip. Deterministic
+(sorted content keys) → reproducible. Restore:
+`rsync -a "$NC_IDTAG_BAK/" "$NC_GAME_DIR/gfx/worlds/" ; rm "$NC_ID_INDEX"`.
+
+> `build_pbr_index.py` / `merge_index.py` build the **legacy
+> content-hash** index (`texture_index.txt`). Superseded by the
+> embedded-ID scheme (immune to clamp / re-encode / dup-collision) but
+> kept as a documented fallback for the pre-ID engine path.
+> `repatch_metallic.py` / `repatch_emissive.py` rewrite a single ORME
+> channel in place from the existing maps (free, no Replicate).
+
+---
 
 ## Cost
 
-clarity (~$0.013) + Marigold normals (~$0.013) + pix2pix AO/rough
-(~$0.003) ≈ **~$0.03 / texture**, JPG-q92 albedo. Full world (~3.5k) +
-modeltextures (~1k) ≈ **$120–150**. Resumable, so a crash/reboot only
-re-costs in-flight textures.
+clarity (~$0.013) + Marigold (~$0.013) + pix2pix (~$0.003) ≈
+**~$0.03 / texture**. World (~3.5k) + models (~1k) ≈ **$120–150**.
+Steps 3–6 are **free and local**. Steps 1–2 are resumable, so a crash
+only re-costs in-flight textures.
 
-## Why these choices (so a fork can reason about changes)
+## Design rationale (so a fork can reason about changes)
 
-- **Hash = crc32(first 64 KiB of the raw DXT bytes) | w<<16 | h.** The
-  engine LockRect-hashes the vanilla texture the game binds; DXT is
-  stored as linear block-rows with no row padding, so the offline-tight
-  bytes equal the runtime pitch and the hashes match. Genuine
-  collisions (different textures, same hash) are *poisoned* (dropped →
-  stay vanilla, never get the wrong HD swap).
-- **Albedo is JPG q92**, normal/orme are PNG. Albedo tolerates it
-  (negligible loss) and it shrinks the corpus ~5× so per-category
-  release tarballs fit GitHub's 2 GB/asset limit. `stbi_load` in the
-  engine reads JPG transparently — no engine change.
-- **UV atlases are not pixel-decomposed.** Single-image svBRDF on an
-  unwrap produces garbage at seams, so model-texture metal/roughness are
-  *class constants* (subject-classified) while AO stays real per-pixel.
-- The engine binds HD albedo at **s0** (bypasses the native 512 px
-  clamp — only the addon path can), normals **s2**, ORME **s3**, and
-  applies PBR-lite on the game's baked lightmap.
+- **Embedded ID, not a content hash.** We control the deployed vanilla
+  file, so we stamp a unique id and read it back exactly via LockRect —
+  immune to the >512 clamp, DXT re-encode nondeterminism, and the
+  byte-identical-duplicate hash collisions that plagued the hash scheme.
+- **Content-keyed id.** A per-physical-file id made clarity-divergent
+  duplicates (`global/pak_X` vs `metal/pak_X`) show different HD per
+  zone. Keying on vanilla content collapses all copies to one container.
+- **Zero visual cost.** A tagged texture is always HD-replaced at s0, so
+  the stomped 4×4 corner is never displayed.
+- **Flat O for tiling world.** See step 5 — the lightmap is the AO.
+- **Albedo JPG q92**, normal/orme PNG: ~5× smaller corpus, fits
+  release-asset limits; `stbi_load` reads JPG with no engine change.
+- **UV atlases not pixel-decomposed**: class-constant metal/roughness,
+  real per-pixel AO (valid on an unwrap).
+- The engine binds HD albedo **s0** (bypasses the native clamp — only
+  the addon can), normals **s2**, ORME **s3**, PBR-lite over the baked
+  lightmap.
+
+*(Architecture validated in-game 2026-05-17. The one-off prototype that
+proved id-survival + container load before the mass rollout is not
+vendored — it served its purpose; `mass_idtag.py` is the reproduction
+step.)*

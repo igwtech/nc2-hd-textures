@@ -4,7 +4,7 @@ Build the PBR triplet index for neocron-renodx-engine.
 
 Key = hash of the *vanilla game texture the engine binds at runtime*
 (LockRect of the loose pak_*.dds the game loads). Value = the three
-sibling maps produced by the _pbr_pipeline:
+sibling maps the pipeline produces:
 
     <hex_hash> <albedo_rel> <normal_rel> <orme_rel>
 
@@ -39,24 +39,40 @@ PAK_DECOMPRESS = ncconfig.PAK_DECOMPRESS
 # so offline-tight == runtime LockRect pitch — the proven match holds —
 # while genuine hash collisions drop 69 -> 21 vs the old 4 KiB. MUST
 # stay in lockstep with HASH_SAMPLE_BYTES in engine_injector.cpp.
-HASH_BYTES = 65536
-
-
 def hash_raw(pixels: bytes, w: int, h: int) -> int:
-    crc = zlib.crc32(pixels[:HASH_BYTES]) & 0xFFFFFFFF
+    # FULL mip-0 content CRC (v0.10): no leading-block cap → no false
+    # positives. Byte-exact vs the engine's pitch-stripped mip-0 read
+    # for unclamped DXT; clamped textures hash differently at runtime →
+    # graceful MISS (vanilla), never a wrong-texture swap.
+    crc = zlib.crc32(pixels) & 0xFFFFFFFF
     return (crc << 32) | ((w & 0xFFFF) << 16) | (h & 0xFFFF)
+
+
+def _mip0_size(w: int, h: int, fourcc: bytes, bitcount: int) -> int:
+    if fourcc in (b"DXT1",):
+        return max(1, (w + 3) // 4) * max(1, (h + 3) // 4) * 8
+    if fourcc in (b"DXT2", b"DXT3", b"DXT4", b"DXT5"):
+        return max(1, (w + 3) // 4) * max(1, (h + 3) // 4) * 16
+    bpp = (bitcount // 8) if bitcount else 4
+    return w * h * bpp
 
 
 def parse_raw(data: bytes) -> tuple[bytes, int, int] | None:
     if data[:4] == b"DDS ":
         h = int.from_bytes(data[12:16], "little")
         w = int.from_bytes(data[16:20], "little")
-        return (data[128:], w, h)
+        flags = int.from_bytes(data[80:84], "little")        # ddspf.dwFlags
+        fourcc = data[84:88] if (flags & 0x4) else b""        # DDPF_FOURCC
+        bitcount = int.from_bytes(data[88:92], "little")      # ddspf.dwRGBBitCount
+        size = _mip0_size(w, h, fourcc, bitcount)
+        return (data[128:128 + size], w, h)                   # mip-0 ONLY
     if data[:2] == b"BM":
         off = int.from_bytes(data[10:14], "little")
         w = int.from_bytes(data[18:22], "little")
         h = abs(int.from_bytes(data[22:26], "little", signed=True))
-        return (data[off:], w, h)
+        bpp = int.from_bytes(data[28:30], "little") // 8 or 4
+        row = ((w * bpp + 3) // 4) * 4                          # BMP 4-byte rows
+        return (data[off:off + row * h], w, h)
     return None
 
 

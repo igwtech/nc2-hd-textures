@@ -30,11 +30,30 @@ def _env(k: str, d: str) -> str:
 GAME_DIR = Path(_env("NC_GAME_DIR", str(Path.home() / "Neocron2")))
 PAK_DECOMPRESS = _env("NC_PAK_DECOMPRESS",
                       str(HERE / "tools" / "pak_decompress.php"))
+PAK_COMPRESS = _env("NC_PAK_COMPRESS",
+                    str(HERE / "tools" / "pak_compress.php"))
 BUILD_DIR = Path(_env("NC_PBR_BUILD", str(REPO / "_build")))
-OUT_DIR = BUILD_DIR / "output"
+OUT_DIR = BUILD_DIR / "output"                  # OUT_DIR/{worlds,modeltextures}
 LOG_DIR = BUILD_DIR / "logs"
 INDEX_JSON = Path(_env("NC_INDEX", str(REPO / "texture_index.json")))
 MODEL_CLASS_TSV = BUILD_DIR / "modeltex_classes.tsv"
+
+# --- vanilla source trees (inside the game install) ------------------
+WORLDS_DIR = GAME_DIR / "gfx" / "worlds"
+MODELTEX_DIR = GAME_DIR / "gfx" / "modeltextures"
+
+# --- deployment (install side; the engine reads these) ---------------
+# .pbr triplet containers + the worlds/modeltextures symlinks the engine
+# resolves; one container per content-group (see mass_idtag.py).
+HD_CORPUS_DIR = Path(_env("NC_HD_CORPUS", str(GAME_DIR / "gfx_pbr")))
+# id -> container index the engine loads ("<id8hex> <relpath>" per line)
+ID_INDEX = Path(_env("NC_ID_INDEX",
+                     str(GAME_DIR / "neocron_id_index.txt")))
+# reversible backups (one-command restore via rsync)
+VANILLA512_BACKUP = Path(_env("NC_VANILLA512_BAK",
+                              str(GAME_DIR / "_vanilla512_backup")))
+IDTAG_BACKUP = Path(_env("NC_IDTAG_BAK",
+                         str(GAME_DIR / "_idtag_backup")))
 
 
 def replicate_token() -> str:

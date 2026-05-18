@@ -1,6 +1,6 @@
 <?php
 
-include 'PAK.class.php';
+include __DIR__ . '/PAK.class.php';
 
 var_dump($argv[1]);
 if(substr($argv[1],-4)==".pak") {
