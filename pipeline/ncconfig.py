@@ -54,6 +54,11 @@ VANILLA512_BACKUP = Path(_env("NC_VANILLA512_BAK",
                               str(GAME_DIR / "_vanilla512_backup")))
 IDTAG_BACKUP = Path(_env("NC_IDTAG_BAK",
                          str(GAME_DIR / "_idtag_backup")))
+# native-install backup (mesh textures whose vanilla DDS we OVERWRITE
+# with the HD form — heads/cloth/etc. for which the engine ID/container
+# path can't deliver, see install_heads_native.py)
+NATIVE_BACKUP = Path(_env("NC_NATIVE_BAK",
+                          str(GAME_DIR / "_native_backup")))
 
 
 def replicate_token() -> str:
