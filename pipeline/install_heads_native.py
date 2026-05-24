@@ -40,10 +40,11 @@ PAKC = str(ncconfig.PAK_COMPRESS)
 CAP = 512
 
 
-def find_vanilla(stem: str) -> "Path | None":
-    """Vanilla modeltexture is flat under MODELTEX_DIR. Try .dds then .bmp."""
+def find_vanilla(rel_no_ext: Path) -> "Path | None":
+    """Vanilla mirrors the corpus subpath (modeltextures has character/,
+    areamc5/, doy/, ...). Try .dds then .bmp at the same relative path."""
     for ext in (".dds", ".bmp"):
-        p = DST / f"{stem}{ext}"
+        p = DST / rel_no_ext.with_suffix(ext)
         if p.exists():
             return p
     return None
@@ -53,7 +54,8 @@ def one(albedo_path: str) -> str:
     try:
         ap = Path(albedo_path)
         stem = ap.name[:-len("_albedo.jpg")]                # pak_xxx
-        vanilla = find_vanilla(stem)
+        rel_no_ext = ap.parent.relative_to(OUT) / stem
+        vanilla = find_vanilla(rel_no_ext)
         if vanilla is None:
             return "no-vanilla"
         is_bmp = vanilla.suffix.lower() == ".bmp"
@@ -93,7 +95,7 @@ def one(albedo_path: str) -> str:
             packed = outd / f"pak_{raw_name}{ext}"
             if not (packed.exists() and packed.stat().st_size):
                 return f"PAKFAIL {stem}"
-            bdst = BACKUP / vanilla.name
+            bdst = BACKUP / vanilla.relative_to(DST)   # mirror subdir
             if not bdst.exists():
                 bdst.parent.mkdir(parents=True, exist_ok=True)
                 bdst.write_bytes(vanilla.read_bytes())
@@ -109,7 +111,7 @@ def main() -> int:
                     help="filename substring filter (default: head)")
     a = ap.parse_args()
     BACKUP.mkdir(parents=True, exist_ok=True)
-    fs = sorted(str(p) for p in OUT.glob("*_albedo.jpg")
+    fs = sorted(str(p) for p in OUT.rglob("*_albedo.jpg")
                 if a.only.lower() in p.name.lower())
     print(f"HD model albedos matching {a.only!r}: {len(fs)} "
           f"(source={OUT}, target={DST}, backup={BACKUP})")
