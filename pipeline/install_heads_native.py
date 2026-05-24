@@ -107,8 +107,10 @@ def one(albedo_path: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", default="head",
-                    help="filename substring filter (default: head)")
+    ap.add_argument("--only", default="",
+                    help="filename substring filter (default: install ALL "
+                         "HD corpus entries that have a vanilla — heads, "
+                         "tops, legs, trousers, arms, ...)")
     a = ap.parse_args()
     BACKUP.mkdir(parents=True, exist_ok=True)
     fs = sorted(str(p) for p in OUT.rglob("*_albedo.jpg")
