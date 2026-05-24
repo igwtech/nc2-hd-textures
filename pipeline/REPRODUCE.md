@@ -21,7 +21,7 @@ launcher only installs & runs the shipped addon).
    |---|---|
    | `*_albedo.jpg` | clarity-upscaler creative regen, guided by the original |
    | `*_n.png` | Marigold surface normals |
-   | `*_orme.png` | RGBA: **R**=occlusion **G**=roughness **B**=metallic **A**=emissive |
+   | `*_orme.png` | RGBA: **R**=occlusion **G**=roughness **B**=metallic **A**=non-emissive (**inverted** v0.12 — A=0 means 100% emissive; most surfaces are non-emis so A=1 keeps PNGs visually opaque) |
 
 2. The **deployment** the engine actually reads (in the game install):
    - every vanilla `pak_*.dds` that has a triplet is stamped with a
@@ -106,6 +106,7 @@ zeroes RGB where emissive(A)==0. Do not "simplify" that.
 python recover_orme.py        # only if some O came out ~0: recompute
                               # exact M/A from albedo, neutral O/R
 python recover_ao_local.py    # O = 1.0 flat for ALL world ORME
+python preserve_magenta.py    # re-imprint vanilla's magenta key into HD
 ```
 **Why flat O:** NC2 floor/walls/ceiling are *tiling*, not UV-mapped. A
 per-tile baked AO repeats and slides with the camera ("ORME jumping").
@@ -113,6 +114,13 @@ The real AO for tiling geometry is in the game **lightmaps**, which the
 substituted `world.ps` already consumes as irradiance. So O is
 neutralised; the normal map supplies relief, roughness/metallic/emissive
 are kept. Per-tile AO only makes sense for genuine UV/atlas props.
+
+**Magenta-key transparency:** NC2 vanilla (esp. BMPs without real alpha)
+uses pure magenta `(255,0,255)` as Doom-style binary transparency. The
+shader `clip()`s magenta pixels (with JPG-q92 tolerance). Because
+clarity doesn't preserve magenta, `preserve_magenta.py` scans the
+pristine ≤512 vanilla (`$NC_IDTAG_BAK`) for the key and re-paints it
+into the HD albedo. Idempotent; only touches textures that had a key.
 
 ### 6. Deploy: embedded-ID stamp + containers  *(local, reversible)*
 ```bash

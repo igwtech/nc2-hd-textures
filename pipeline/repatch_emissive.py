@@ -33,7 +33,8 @@ for p in glob.glob(str(OUT / "**" / "*_orme.png"), recursive=True):
         e = np.asarray(Image.fromarray((np.clip(e, 0, 1) * 255)
                        .astype(np.uint8)).resize((a.shape[1], a.shape[0]),
                        Image.BILINEAR), np.float32) / 255.0
-    new_a = np.uint8(np.clip(e, 0, 1) * 255)
+    # A inverted (v0.12): 1=non-emis, 0=full emis (shader does 1-a).
+    new_a = np.uint8((1.0 - np.clip(e, 0, 1)) * 255)
     if np.array_equal(a[..., 3], new_a):
         skip += 1
         continue

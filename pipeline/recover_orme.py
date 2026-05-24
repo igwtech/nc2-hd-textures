@@ -54,7 +54,8 @@ def one(orme_path: str) -> str:
         o = np.full((h, w), NEUTRAL_O, np.float32)
         r = np.full((h, w), NEUTRAL_R, np.float32)
         mch = np.full((h, w), m, np.float32)
-        rgba = np.stack([o, r, mch, np.clip(e, 0, 1)], -1)
+        # A inverted (v0.12): 1=non-emis, 0=full emis (shader does 1-a).
+        rgba = np.stack([o, r, mch, 1.0 - np.clip(e, 0, 1)], -1)
         Image.fromarray((rgba * 255).astype(np.uint8), "RGBA").save(
             orme_path, optimize=True)
         return "rebuilt"

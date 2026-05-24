@@ -447,7 +447,11 @@ def pack_orme(occ: np.ndarray, rough: np.ndarray,
     r = fit(rough) if rough.ndim == 2 else fit(rough[..., 0])
     e = fit(emis) if emis.ndim == 2 else fit(emis[..., 0])
     m = np.full((h, w), np.clip(metal, 0, 1), np.float32)
-    rgba = np.stack([o, r, m, e], axis=-1)
+    # Emissive is stored INVERTED (v0.12): A=1 -> non-emissive,
+    # A=0 -> 100% emissive. Most surfaces are non-emissive so this keeps
+    # the PNG alpha visually opaque (instead of fully transparent the way
+    # A=0=non-emis did). The shader does (1 - orme.a) before use.
+    rgba = np.stack([o, r, m, 1.0 - np.clip(e, 0, 1)], axis=-1)
     return Image.fromarray((rgba * 255).astype(np.uint8), "RGBA")
 
 
